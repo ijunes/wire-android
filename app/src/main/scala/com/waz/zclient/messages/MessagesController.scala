@@ -20,7 +20,7 @@ package com.waz.zclient.messages
 import android.view.View
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.Message
-import com.waz.model.{ConvId, MessageData, MessageId}
+import com.waz.model.{ConvId, MessageData, MessageId, SyncId}
 import com.waz.service.ZMessaging
 import com.waz.utils.events.{EventContext, EventStream, Signal}
 import com.waz.zclient.controllers.navigation._
@@ -29,6 +29,8 @@ import com.waz.zclient.pages.main.conversationpager.controller.{ISlidingPaneCont
 import com.waz.zclient.utils.ContextUtils
 import com.waz.zclient.{Injectable, Injector, WireContext}
 import org.threeten.bp.Instant
+
+import scala.concurrent.Future
 
 class MessagesController()(implicit injector: Injector, cxt: WireContext, ev: EventContext) extends Injectable {
   import com.waz.threading.Threading.Implicits.Background
@@ -110,4 +112,12 @@ class MessagesController()(implicit injector: Injector, cxt: WireContext, ev: Ev
   def getMessage(messageId: MessageId): Signal[Option[MessageData]] = {
     zms.flatMap(z => Signal.future(z.messagesStorage.get(messageId)))
   }
+
+  def retryMessageSending(ids: Seq[MessageId]): Future[Seq[SyncId]] =
+    for {
+      zms <- zms.head
+      messages <- zms.messagesStorage.getAll(ids).map(_.flatten)
+      res <- Future.traverse(messages)(msg => zms.messages.retryMessageSending(msg.convId, msg.id))
+    } yield res.flatten
+
 }
